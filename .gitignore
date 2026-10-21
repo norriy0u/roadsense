@@ -3,3 +3,7 @@ __pycache__/
 *.pyc
 .DS_Store
 .env
+
+writer.py
+patch_osm.py
+test_script_0.js
