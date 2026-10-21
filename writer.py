@@ -1,0 +1,1107 @@
+#!/usr/bin/env python3
+"""Writes the premium RoadSense dark-mode dashboard to index.html"""
+import pathlib
+
+HTML = r"""<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RoadSense &ndash; Fleet Intelligence Dashboard</title>
+  <meta name="description" content="RoadSense: Edge-AI road condition monitoring for heavy commercial truck fleets. Real-time cargo risk and road roughness intelligence." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <style>
+    /* =========================================================
+       DESIGN TOKENS
+    ========================================================= */
+    :root, [data-theme="dark"] {
+      --brand-red:      #E04535;
+      --brand-coral:    #F06040;
+      --brand-gradient: linear-gradient(135deg,#D63B2F 0%,#E8543F 60%,#F0694E 100%);
+      --brand-glow:     rgba(214,59,47,0.25);
+      --bg:             #0B0D10;
+      --bg-card:        #181B20;
+      --bg-card-hover:  #1E2229;
+      --bg-sidebar:     #0F1116;
+      --bg-input:       #1E2229;
+      --border:         rgba(255,255,255,0.07);
+      --border-hover:   rgba(214,59,47,0.55);
+      --text-primary:   #E8E8EA;
+      --text-secondary: #9498A0;
+      --text-muted:     #5A5F6B;
+      --safe:           #2ECC71;
+      --safe-bg:        rgba(46,204,113,0.12);
+      --safe-glow:      rgba(46,204,113,0.28);
+      --caution:        #F0A030;
+      --caution-bg:     rgba(240,160,48,0.12);
+      --caution-glow:   rgba(240,160,48,0.28);
+      --alert:          #E04535;
+      --alert-bg:       rgba(224,69,53,0.12);
+      --alert-glow:     rgba(224,69,53,0.32);
+      --radius-card:    20px;
+      --radius-sm:      12px;
+      --radius-btn:     50px;
+      --shadow-card:    0 1px 0 0 rgba(255,255,255,0.04) inset,0 0 0 1px var(--border);
+      --shadow-hover:   0 0 0 1px var(--border-hover),0 8px 32px rgba(0,0,0,0.45);
+      --transition:     all 0.22s cubic-bezier(0.4,0,0.2,1);
+      --chart-grid:     rgba(255,255,255,0.05);
+      --chart-tick:     #5A5F6B;
+      --tooltip-bg:     #1E2229;
+      --tooltip-text:   #E8E8EA;
+    }
+    [data-theme="light"] {
+      --bg:             #F2F2F5;
+      --bg-card:        #FFFFFF;
+      --bg-card-hover:  #F8F8FB;
+      --bg-sidebar:     #FAFAFA;
+      --bg-input:       #F2F2F5;
+      --border:         rgba(0,0,0,0.08);
+      --border-hover:   rgba(214,59,47,0.4);
+      --text-primary:   #111318;
+      --text-secondary: #6B7280;
+      --text-muted:     #9CA3AF;
+      --safe-bg:        #ECFDF5;
+      --safe-glow:      rgba(46,204,113,0.15);
+      --caution-bg:     #FFFBEB;
+      --caution-glow:   rgba(240,160,48,0.15);
+      --alert-bg:       #FEF2F2;
+      --alert-glow:     rgba(224,69,53,0.15);
+      --brand-glow:     rgba(214,59,47,0.15);
+      --shadow-card:    0 1px 3px rgba(0,0,0,0.06),0 2px 12px rgba(0,0,0,0.04);
+      --shadow-hover:   0 0 0 1.5px var(--border-hover),0 8px 32px rgba(0,0,0,0.1);
+      --chart-grid:     rgba(0,0,0,0.05);
+      --chart-tick:     #9CA3AF;
+      --tooltip-bg:     #FFFFFF;
+      --tooltip-text:   #111318;
+    }
+
+    /* =========================================================
+       RESET & BASE
+    ========================================================= */
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    html{font-size:14px;scroll-behavior:smooth;}
+    body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text-primary);
+         min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased;}
+    ::-webkit-scrollbar{width:5px;}
+    ::-webkit-scrollbar-track{background:transparent;}
+    ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:99px;}
+    [data-theme="light"] ::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.12);}
+
+    /* =========================================================
+       LAYOUT
+    ========================================================= */
+    .app-shell{display:grid;grid-template-columns:240px 1fr;grid-template-rows:auto 1fr;min-height:100vh;}
+
+    /* =========================================================
+       HEADER — frosted glass
+    ========================================================= */
+    .header{
+      grid-column:1/-1;
+      background:rgba(11,13,16,0.85);
+      backdrop-filter:blur(24px) saturate(180%);
+      -webkit-backdrop-filter:blur(24px) saturate(180%);
+      border-bottom:1px solid var(--border);
+      padding:0 28px;height:60px;
+      display:flex;align-items:center;justify-content:space-between;
+      position:sticky;top:0;z-index:1000;
+    }
+    [data-theme="light"] .header{background:rgba(255,255,255,0.90);}
+    .header-left{display:flex;align-items:center;gap:14px;}
+    .logo-icon{
+      width:36px;height:36px;background:var(--brand-gradient);border-radius:10px;
+      display:flex;align-items:center;justify-content:center;font-size:18px;
+      box-shadow:0 0 18px var(--brand-glow);flex-shrink:0;
+    }
+    .logo-text h1{font-size:1.18rem;font-weight:800;letter-spacing:-0.03em;color:var(--text-primary);line-height:1;}
+    .logo-text p{font-size:0.68rem;font-weight:400;color:var(--text-secondary);margin-top:2px;}
+    .header-right{display:flex;align-items:center;gap:14px;}
+    .theme-toggle{
+      width:34px;height:34px;background:var(--bg-input);border:1px solid var(--border);
+      border-radius:8px;display:flex;align-items:center;justify-content:center;
+      cursor:pointer;font-size:1rem;transition:var(--transition);color:var(--text-secondary);
+    }
+    .theme-toggle:hover{border-color:var(--border-hover);color:var(--text-primary);}
+    .header-clock{color:var(--text-secondary);font-size:0.72rem;font-weight:500;text-align:right;line-height:1.6;}
+    .header-clock span{display:block;font-weight:700;font-size:0.88rem;color:var(--text-primary);font-variant-numeric:tabular-nums;letter-spacing:-0.01em;}
+    .live-indicator{
+      display:flex;align-items:center;gap:7px;
+      background:rgba(46,204,113,0.10);border:1px solid rgba(46,204,113,0.28);
+      border-radius:50px;padding:5px 13px;
+      color:var(--safe);font-size:0.72rem;font-weight:700;letter-spacing:0.04em;
+      box-shadow:0 0 16px rgba(46,204,113,0.10);
+    }
+    .live-dot{width:7px;height:7px;background:var(--safe);border-radius:50%;animation:pulse-dot 2s ease-in-out infinite;}
+    @keyframes pulse-dot{0%,100%{box-shadow:0 0 0 0 var(--safe-glow);}50%{box-shadow:0 0 0 5px transparent;}}
+
+    /* =========================================================
+       SIDEBAR
+    ========================================================= */
+    .sidebar{
+      background:var(--bg-sidebar);border-right:1px solid var(--border);
+      padding:20px 12px;display:flex;flex-direction:column;gap:4px;
+      position:sticky;top:60px;height:calc(100vh - 60px);overflow-y:auto;
+    }
+    .nav-label{font-size:0.6rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;
+               color:var(--text-muted);padding:4px 12px;margin-top:10px;}
+    .nav-btn{
+      display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;
+      border:none;background:transparent;cursor:pointer;font-family:'Inter',sans-serif;
+      font-size:0.82rem;font-weight:500;color:var(--text-secondary);
+      transition:var(--transition);width:100%;text-align:left;position:relative;
+    }
+    .nav-btn:hover{background:var(--bg-card);color:var(--text-primary);}
+    .nav-btn.active{
+      background:linear-gradient(135deg,rgba(214,59,47,0.15) 0%,rgba(232,84,63,0.08) 100%);
+      color:#F06040;font-weight:600;box-shadow:inset 0 0 0 1px rgba(224,69,53,0.20);
+    }
+    .nav-btn.active .nav-icon{filter:drop-shadow(0 0 6px rgba(224,69,53,0.5));}
+    .nav-icon{font-size:1rem;width:20px;text-align:center;flex-shrink:0;}
+    .nav-badge{
+      margin-left:auto;background:var(--alert);color:#fff;
+      font-size:0.6rem;font-weight:800;border-radius:50px;padding:2px 7px;
+      min-width:20px;text-align:center;box-shadow:0 0 8px var(--alert-glow);
+    }
+    .status-dot-sm{width:6px;height:6px;border-radius:50%;background:var(--safe);
+                   display:inline-block;margin-right:6px;box-shadow:0 0 6px var(--safe-glow);}
+    @keyframes glow-pulse{
+      0%,100%{box-shadow:0 0 0 0 var(--alert-glow);transform:scale(1);}
+      50%{box-shadow:0 0 0 5px transparent;transform:scale(1.2);}
+    }
+    .sidebar-footer{margin-top:auto;padding-top:14px;border-top:1px solid var(--border);}
+    .sidebar-system-status{font-size:0.7rem;color:var(--text-muted);padding:6px 10px;}
+    .system-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
+    .divider{height:1px;background:var(--border);margin:4px 0;}
+
+    /* =========================================================
+       MAIN CONTENT
+    ========================================================= */
+    .main-content{padding:28px 32px;overflow-y:auto;max-height:calc(100vh - 60px);}
+    .page-view{display:none;}
+    .page-view.active{display:block;animation:pageFadeIn 0.3s ease forwards;}
+    @keyframes pageFadeIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+    .card-animate{opacity:0;transform:translateY(14px);animation:cardEnter 0.4s ease forwards;}
+    @keyframes cardEnter{to{opacity:1;transform:translateY(0);}}
+
+    /* =========================================================
+       SECTION HEADER
+    ========================================================= */
+    .section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;}
+    .section-title{font-size:1.15rem;font-weight:700;letter-spacing:-0.02em;color:var(--text-primary);}
+    .section-sub{font-size:0.78rem;color:var(--text-secondary);margin-top:3px;font-weight:400;}
+
+    /* =========================================================
+       STAT CARDS
+    ========================================================= */
+    .stat-cards-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
+    .stat-card{
+      background:var(--bg-card);border-radius:var(--radius-card);padding:26px 26px 22px;
+      border:1px solid var(--border);position:relative;overflow:hidden;
+      cursor:default;transition:var(--transition);
+    }
+    .stat-card:hover{transform:translateY(-2px);border-color:var(--border-hover);background:var(--bg-card-hover);}
+    .stat-card::after{
+      content:'';position:absolute;left:0;top:20%;bottom:20%;
+      width:3px;border-radius:0 3px 3px 0;opacity:0;transition:opacity 0.3s ease;
+    }
+    .stat-card:hover::after{opacity:1;}
+    .stat-card.card-red::after  {background:var(--alert);  box-shadow:0 0 12px var(--alert-glow);}
+    .stat-card.card-green::after{background:var(--safe);   box-shadow:0 0 12px var(--safe-glow);}
+    .stat-card.card-amber::after{background:var(--caution);box-shadow:0 0 12px var(--caution-glow);}
+    .stat-card.card-blue::after {background:#3B82F6;       box-shadow:0 0 12px rgba(59,130,246,0.3);}
+    .stat-label{font-size:0.68rem;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;
+                color:var(--text-muted);margin-bottom:10px;}
+    .stat-value{font-size:3rem;font-weight:800;line-height:1;letter-spacing:-0.03em;
+                color:var(--text-primary);transition:color 0.3s ease;font-variant-numeric:tabular-nums;}
+    .stat-value.alerting{color:var(--alert);text-shadow:0 0 24px var(--alert-glow);}
+    .stat-icon{position:absolute;top:22px;right:22px;font-size:1.4rem;opacity:0.28;}
+    .stat-delta{margin-top:8px;font-size:0.7rem;color:var(--text-muted);display:flex;align-items:center;gap:4px;}
+    .stat-delta.up  {color:var(--safe);}
+    .stat-delta.down{color:var(--alert);}
+
+    /* Animated gradient roughness gauge */
+    .roughness-gauge-wrap{margin-top:10px;}
+    .roughness-bar-outer{width:100%;height:5px;background:var(--border);border-radius:99px;overflow:hidden;}
+    .roughness-fill{
+      height:100%;border-radius:99px;
+      background:linear-gradient(90deg,#2ECC71 0%,#F0A030 50%,#E04535 100%);
+      transition:width 1.2s cubic-bezier(0.4,0,0.2,1);position:relative;
+    }
+    .roughness-fill::after{
+      content:'';position:absolute;inset:0;
+      background:linear-gradient(90deg,transparent 60%,rgba(255,255,255,0.22));
+      animation:shimmer 2.5s ease-in-out infinite;
+    }
+    @keyframes shimmer{0%,100%{opacity:0;}50%{opacity:1;}}
+    .roughness-pct{font-size:0.63rem;font-weight:700;color:var(--text-secondary);
+                   margin-top:5px;display:flex;justify-content:space-between;align-items:center;}
+
+    /* =========================================================
+       TRUCK MINI CARDS
+    ========================================================= */
+    .truck-list-row{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;}
+    .truck-mini-card{
+      background:var(--bg-card);border-radius:16px;padding:16px 18px;
+      border:1px solid var(--border);cursor:pointer;transition:var(--transition);
+      border-top:2px solid transparent;
+    }
+    .truck-mini-card:hover{transform:translateY(-2px);border-color:var(--border-hover);background:var(--bg-card-hover);}
+    .truck-mini-card.status-safe   {border-top-color:var(--safe);}
+    .truck-mini-card.status-caution{border-top-color:var(--caution);}
+    .truck-mini-card.status-alert  {border-top-color:var(--alert);box-shadow:0 0 20px -6px var(--alert-glow);}
+    .truck-mini-id    {font-size:0.78rem;font-weight:800;color:var(--text-primary);letter-spacing:-0.01em;}
+    .truck-mini-driver{font-size:0.65rem;color:var(--text-muted);margin-top:2px;}
+    .truck-mini-risk  {margin-top:10px;font-size:1.35rem;font-weight:800;letter-spacing:-0.02em;}
+    .truck-mini-risk.risk-safe   {color:var(--safe);}
+    .truck-mini-risk.risk-caution{color:var(--caution);}
+    .truck-mini-risk.risk-alert  {color:var(--alert);text-shadow:0 0 14px var(--alert-glow);}
+    .truck-mini-label{font-size:0.6rem;color:var(--text-muted);margin-top:1px;}
+
+    /* =========================================================
+       MAP + FEED ROW
+    ========================================================= */
+    .map-feed-row{display:grid;grid-template-columns:1fr 340px;gap:16px;margin-bottom:20px;}
+    .card{background:var(--bg-card);border-radius:var(--radius-card);border:1px solid var(--border);overflow:hidden;transition:var(--transition);}
+    .card-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+    .card-title{font-size:0.82rem;font-weight:700;letter-spacing:-0.01em;color:var(--text-primary);display:flex;align-items:center;gap:8px;}
+    #main-map{height:430px;width:100%;}
+    .leaflet-container{font-family:'Inter',sans-serif !important;}
+    
+
+    /* Popup glass */
+    .leaflet-popup-content-wrapper{
+      border-radius:14px !important;background:var(--bg-card) !important;
+      border:1px solid var(--border) !important;
+      box-shadow:0 8px 32px rgba(0,0,0,0.45),0 0 0 1px rgba(255,255,255,0.04) !important;
+      backdrop-filter:blur(20px) !important;
+      font-family:'Inter',sans-serif !important;padding:0 !important;overflow:hidden;
+      color:var(--text-primary) !important;
+    }
+    .leaflet-popup-content{margin:0 !important;width:auto !important;color:var(--text-primary) !important;}
+    .leaflet-popup-tip-container{display:none;}
+    .popup-inner{padding:14px 16px;}
+    .popup-truck-id{font-weight:800;font-size:0.9rem;letter-spacing:-0.01em;color:var(--text-primary);}
+    .popup-driver  {font-size:0.7rem;color:var(--text-secondary);margin-bottom:8px;}
+    .popup-row     {display:flex;justify-content:space-between;gap:12px;font-size:0.7rem;color:var(--text-secondary);margin-top:4px;}
+    .popup-row strong{color:var(--text-primary);}
+    .popup-btn{
+      display:block;width:100%;background:var(--brand-gradient);color:#fff;border:none;cursor:pointer;
+      padding:9px;font-family:'Inter',sans-serif;font-size:0.72rem;font-weight:700;text-align:center;
+      letter-spacing:0.02em;transition:opacity 0.2s ease;
+    }
+    .popup-btn:hover{opacity:0.88;}
+
+    /* =========================================================
+       EVENT FEED
+    ========================================================= */
+    .event-feed-list{max-height:430px;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:6px;}
+    .event-card{
+      display:flex;align-items:flex-start;gap:10px;padding:11px 13px;
+      border-radius:12px;border:1px solid var(--border);background:transparent;
+      transition:var(--transition);cursor:pointer;
+    }
+    .event-card:hover{background:var(--bg-card-hover);border-color:rgba(255,255,255,0.12);}
+    .event-card.new-event{animation:slideInFromRight 0.45s cubic-bezier(0.34,1.56,0.64,1);}
+    @keyframes slideInFromRight{from{opacity:0;transform:translateX(18px) scale(0.97);}to{opacity:1;transform:translateX(0) scale(1);}}
+    .event-icon-wrap{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+    .event-icon-wrap.safe   {background:var(--safe-bg);   box-shadow:0 0 10px var(--safe-glow);}
+    .event-icon-wrap.caution{background:var(--caution-bg);box-shadow:0 0 10px var(--caution-glow);}
+    .event-icon-wrap.alert  {background:var(--alert-bg);  box-shadow:0 0 10px var(--alert-glow);}
+    .event-info{flex:1;min-width:0;}
+    .event-truck{font-size:0.73rem;font-weight:700;color:var(--text-primary);letter-spacing:-0.01em;}
+    .event-type {font-size:0.7rem; font-weight:500;color:var(--text-secondary);margin-top:1px;}
+    .event-time {font-size:0.63rem;color:var(--text-muted);margin-top:2px;}
+    .event-severity-pill{font-size:0.6rem;font-weight:800;padding:2px 8px;border-radius:50px;flex-shrink:0;margin-top:2px;letter-spacing:0.04em;}
+    .pill-safe   {background:var(--safe-bg);   color:var(--safe);}
+    .pill-caution{background:var(--caution-bg);color:var(--caution);}
+    .pill-alert  {background:var(--alert-bg);  color:var(--alert);box-shadow:0 0 8px var(--alert-glow);}
+
+    /* =========================================================
+       TRUCK DETAIL MODAL
+    ========================================================= */
+    .modal-overlay{
+      position:fixed;inset:0;background:rgba(0,0,0,0.6);
+      backdrop-filter:blur(6px) saturate(80%);z-index:2000;
+      display:flex;align-items:flex-start;justify-content:flex-end;
+      opacity:0;pointer-events:none;transition:opacity 0.28s ease;
+    }
+    .modal-overlay.open{opacity:1;pointer-events:all;}
+    .modal-panel{
+      width:580px;height:100vh;background:var(--bg-card);
+      border-left:1px solid var(--border);overflow-y:auto;
+      transform:translateX(24px);transition:transform 0.32s cubic-bezier(0.4,0,0.2,1);
+    }
+    .modal-overlay.open .modal-panel{transform:translateX(0);}
+    .modal-header{
+      background:linear-gradient(160deg,rgba(214,59,47,0.15) 0%,transparent 60%);
+      border-bottom:1px solid var(--border);padding:28px 28px 22px;
+      position:sticky;top:0;z-index:10;backdrop-filter:blur(20px);
+      background-color:var(--bg-card);
+    }
+    .modal-close{
+      position:absolute;top:20px;right:20px;width:30px;height:30px;
+      background:var(--bg-input);border:1px solid var(--border);border-radius:8px;
+      color:var(--text-secondary);cursor:pointer;font-size:0.85rem;
+      display:flex;align-items:center;justify-content:center;transition:var(--transition);
+    }
+    .modal-close:hover{border-color:var(--border-hover);color:var(--text-primary);}
+    .modal-truck-id  {font-size:1.45rem;font-weight:800;letter-spacing:-0.03em;color:var(--text-primary);}
+    .modal-truck-route{font-size:0.78rem;color:var(--text-secondary);margin-top:4px;}
+    .modal-driver    {font-size:0.72rem;color:var(--text-muted);margin-top:3px;}
+    .modal-body{padding:22px;display:flex;flex-direction:column;gap:18px;}
+    .risk-gauge-card{
+      background:var(--bg-card);border-radius:var(--radius-card);padding:26px;
+      border:1px solid var(--border);text-align:center;transition:var(--transition);
+    }
+    .risk-gauge-card:hover{border-color:var(--border-hover);}
+    .risk-gauge-container{position:relative;width:170px;height:95px;margin:16px auto 0;}
+    .risk-gauge-svg{overflow:visible;}
+    .risk-gauge-value{
+      font-size:2.1rem;font-weight:900;letter-spacing:-0.04em;
+      position:absolute;bottom:0;left:50%;transform:translateX(-50%);
+    }
+    .risk-gauge-label{font-size:0.72rem;color:var(--text-secondary);margin-top:12px;}
+    .chart-card{
+      background:var(--bg-card);border-radius:var(--radius-card);padding:22px;
+      border:1px solid var(--border);transition:var(--transition);
+    }
+    .chart-card:hover{border-color:rgba(255,255,255,0.12);}
+    .chart-card canvas{max-height:220px;}
+
+    /* Timeline */
+    .timeline{padding:4px 0;}
+    .timeline-item{
+      display:flex;gap:14px;padding:10px 0 10px 22px;
+      border-left:1px solid var(--border);margin-left:18px;position:relative;
+    }
+    .timeline-item::before{
+      content:'';position:absolute;left:-5px;top:16px;
+      width:9px;height:9px;border-radius:50%;border:2px solid var(--bg-card);
+    }
+    .timeline-item.t-safe::before   {background:var(--safe);   box-shadow:0 0 8px var(--safe-glow);}
+    .timeline-item.t-caution::before{background:var(--caution);box-shadow:0 0 8px var(--caution-glow);}
+    .timeline-item.t-alert::before  {background:var(--alert);  box-shadow:0 0 8px var(--alert-glow);}
+    .timeline-content{flex:1;}
+    .timeline-time  {font-size:0.65rem;color:var(--text-muted);}
+    .timeline-event {font-size:0.76rem;font-weight:600;color:var(--text-primary);margin-top:2px;}
+    .timeline-coords{font-size:0.63rem;color:var(--text-muted);font-family:'SF Mono','Fira Code',monospace;margin-top:2px;}
+
+    /* =========================================================
+       ALERTS LOG
+    ========================================================= */
+    .filter-row{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;}
+    .filter-btn{
+      padding:7px 16px;border-radius:var(--radius-btn);border:1px solid var(--border);
+      background:var(--bg-card);font-family:'Inter',sans-serif;font-size:0.76rem;font-weight:600;
+      color:var(--text-secondary);cursor:pointer;transition:var(--transition);
+    }
+    .filter-btn:hover{border-color:var(--border-hover);color:#F06040;}
+    .filter-btn.active{background:var(--brand-gradient);border-color:transparent;color:#fff;box-shadow:0 0 16px var(--brand-glow);}
+    .alert-row{
+      background:var(--bg-card);border-radius:13px;border:1px solid var(--border);
+      border-left:3px solid var(--safe);padding:14px 18px;margin-bottom:8px;
+      display:flex;align-items:center;gap:16px;transition:var(--transition);cursor:pointer;
+    }
+    .alert-row:hover{transform:translateX(2px);background:var(--bg-card-hover);}
+    .alert-row.sev-caution{border-left-color:var(--caution);}
+    .alert-row.sev-alert  {border-left-color:var(--alert);box-shadow:-2px 0 14px -4px var(--alert-glow);}
+    .alert-row-icon {font-size:1.3rem;}
+    .alert-row-main {flex:1;}
+    .alert-row-title{font-size:0.8rem;font-weight:700;color:var(--text-primary);}
+    .alert-row-sub  {font-size:0.7rem;color:var(--text-secondary);margin-top:2px;}
+    .alert-row-time {font-size:0.65rem;color:var(--text-muted);white-space:nowrap;}
+    .alert-row-truck{font-size:0.68rem;font-weight:700;background:var(--bg-input);border-radius:7px;
+                     padding:4px 10px;color:var(--text-secondary);border:1px solid var(--border);}
+
+    /* =========================================================
+       ANALYTICS
+    ========================================================= */
+    .analytics-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px;}
+    .maintenance-card{background:var(--bg-card);border-radius:var(--radius-card);padding:24px;border:1px solid var(--border);}
+    .maintenance-item{display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid var(--border);cursor:pointer;}
+    .maintenance-item:last-child{border-bottom:none;}
+    .maintenance-truck-id{font-weight:700;font-size:0.8rem;color:var(--text-primary);}
+    .maintenance-reason  {font-size:0.7rem;color:var(--text-secondary);margin-top:2px;}
+    .maintenance-km      {font-size:0.72rem;font-weight:700;color:var(--alert);margin-left:auto;}
+
+    /* =========================================================
+       BUTTONS
+    ========================================================= */
+    .btn{
+      padding:8px 18px;border-radius:var(--radius-btn);border:none;cursor:pointer;
+      font-family:'Inter',sans-serif;font-size:0.76rem;font-weight:600;
+      letter-spacing:0.01em;transition:var(--transition);
+      display:inline-flex;align-items:center;gap:6px;
+    }
+    .btn-primary{background:var(--brand-gradient);color:#fff;box-shadow:0 0 20px var(--brand-glow);}
+    .btn-primary:hover{transform:translateY(-1px);box-shadow:0 0 28px rgba(214,59,47,0.35);}
+    .btn-ghost{background:var(--bg-input);color:var(--text-secondary);border:1px solid var(--border);}
+    .btn-ghost:hover{border-color:var(--border-hover);color:var(--text-primary);}
+
+    /* Tags */
+    .tag{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:50px;font-size:0.65rem;font-weight:700;letter-spacing:0.02em;}
+    .tag-safe   {background:var(--safe-bg);   color:var(--safe);}
+    .tag-caution{background:var(--caution-bg);color:var(--caution);}
+    .tag-alert  {background:var(--alert-bg);  color:var(--alert);}
+
+    /* Number animation */
+    .number-update{animation:numPop 0.5s cubic-bezier(0.34,1.56,0.64,1);}
+    @keyframes numPop{0%{transform:scale(1);}40%{transform:scale(1.10);color:var(--brand-coral);}100%{transform:scale(1);}}
+
+    .empty-state{text-align:center;padding:48px;color:var(--text-muted);}
+    .empty-state .empty-icon{font-size:2.5rem;margin-bottom:12px;}
+
+    /* Responsive */
+    @media(max-width:1200px){
+      .stat-cards-row{grid-template-columns:repeat(2,1fr);}
+      .truck-list-row{grid-template-columns:repeat(3,1fr);}
+      .map-feed-row  {grid-template-columns:1fr;}
+    }
+    @media(max-width:900px){
+      .app-shell{grid-template-columns:1fr;}
+      .sidebar  {display:none;}
+      .analytics-grid{grid-template-columns:1fr;}
+      .main-content{padding:20px;}
+    }
+
+    /* Pulsing alert ring */
+    @keyframes ring-pulse{0%{transform:scale(1);opacity:0.7;}100%{transform:scale(2.5);opacity:0;}}
+    .ring-pulse{position:absolute;inset:-2px;border-radius:50%;animation:ring-pulse 1.7s ease-out infinite;}
+  </style>
+</head>
+<body>
+
+<div class="app-shell">
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-left">
+      <div class="logo-icon">&#128739;</div>
+      <div class="logo-text">
+        <h1>RoadSense</h1>
+        <p>Hear the road before it hits the cargo</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="live-indicator"><div class="live-dot"></div>LIVE</div>
+      <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle dark/light mode">&#127769;</button>
+      <div class="header-clock">
+        <small id="clock-date">Mon, 21 Jul 2026</small>
+        <span id="clock-time">23:38:44</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- SIDEBAR -->
+  <nav class="sidebar" id="sidebar">
+    <div class="nav-label">Navigation</div>
+    <button class="nav-btn active" id="nav-overview" onclick="navigateTo('overview')">
+      <span class="nav-icon">&#128202;</span> Overview
+    </button>
+    <button class="nav-btn" id="nav-alerts" onclick="navigateTo('alerts')">
+      <span class="nav-icon">&#128276;</span> Alerts Log
+      <span class="nav-badge" id="nav-alerts-badge">0</span>
+    </button>
+    <button class="nav-btn" id="nav-analytics" onclick="navigateTo('analytics')">
+      <span class="nav-icon">&#128200;</span> Analytics
+    </button>
+    <div class="nav-label" style="margin-top:18px;">Fleet</div>
+    <div id="sidebar-truck-list"></div>
+    <div class="sidebar-footer">
+      <div class="sidebar-system-status">
+        <div class="system-row">
+          <span><span class="status-dot-sm"></span>ESP32-S3 Nodes</span>
+          <span style="color:var(--safe);font-weight:700;font-size:0.7rem;">5 Online</span>
+        </div>
+        <div class="system-row">
+          <span><span class="status-dot-sm"></span>GSM Gateway</span>
+          <span style="color:var(--safe);font-weight:700;font-size:0.7rem;">OK</span>
+        </div>
+        <div class="divider" style="margin:6px 0;"></div>
+        <div class="system-row">
+          <span>Last Sync</span>
+          <span id="last-sync-time" style="font-weight:600;color:var(--text-secondary);">Just now</span>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <main class="main-content" id="main-content">
+
+    <!-- PAGE: OVERVIEW -->
+    <div class="page-view active" id="page-overview">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Fleet Overview</div>
+          <div class="section-sub">Real-time road condition monitoring across all active trucks</div>
+        </div>
+        <button class="btn btn-ghost" onclick="exportData()">&#11015; Export Report</button>
+      </div>
+      <div class="stat-cards-row">
+        <div class="stat-card card-blue card-animate" style="animation-delay:0ms">
+          <span class="stat-icon">&#128667;</span>
+          <div class="stat-label">Active Trucks</div>
+          <div class="stat-value" id="stat-active">5</div>
+          <div class="stat-delta up">&#8593; All operational</div>
+        </div>
+        <div class="stat-card card-red card-animate" style="animation-delay:60ms">
+          <span class="stat-icon">&#9888;</span>
+          <div class="stat-label">Alerting Now</div>
+          <div class="stat-value" id="stat-alerting">0</div>
+          <div class="stat-delta" id="stat-alerting-sub">No critical alerts</div>
+        </div>
+        <div class="stat-card card-amber card-animate" style="animation-delay:120ms">
+          <span class="stat-icon">&#128225;</span>
+          <div class="stat-label">Avg. Road Roughness</div>
+          <div class="stat-value" id="stat-roughness">--</div>
+          <div class="roughness-gauge-wrap">
+            <div class="roughness-bar-outer">
+              <div class="roughness-fill" id="roughness-fill" style="width:0%"></div>
+            </div>
+            <div class="roughness-pct">
+              <span style="color:var(--safe);">Smooth</span>
+              <span id="roughness-pct-val" style="font-weight:700;">0%</span>
+              <span style="color:var(--alert);">Severe</span>
+            </div>
+          </div>
+        </div>
+        <div class="stat-card card-green card-animate" style="animation-delay:180ms">
+          <span class="stat-icon">&#128203;</span>
+          <div class="stat-label">Total Events Today</div>
+          <div class="stat-value" id="stat-events">0</div>
+          <div class="stat-delta" id="stat-events-sub">Updating live&hellip;</div>
+        </div>
+      </div>
+      <div class="truck-list-row" id="truck-mini-cards"></div>
+      <div class="map-feed-row">
+        <div class="card card-animate" style="animation-delay:240ms">
+          <div class="card-header">
+            <div class="card-title">&#128506; Live Fleet Map
+              <span class="tag tag-safe" style="font-size:0.58rem;">OpenStreetMap</span>
+            </div>
+            <button class="btn btn-ghost" style="font-size:0.7rem;padding:5px 12px;" onclick="centerMap()">&#8635; Re-center</button>
+          </div>
+          <div id="main-map"></div>
+        </div>
+        <div class="card card-animate" style="animation-delay:300ms;display:flex;flex-direction:column;">
+          <div class="card-header">
+            <div class="card-title">&#9889; Recent Events</div>
+            <span style="font-size:0.65rem;color:var(--text-muted);" id="feed-count">0 events</span>
+          </div>
+          <div class="event-feed-list" id="event-feed"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE: ALERTS -->
+    <div class="page-view" id="page-alerts">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Alerts Log</div>
+          <div class="section-sub">All events across the fleet, most recent first</div>
+        </div>
+        <button class="btn btn-primary" onclick="clearAlerts()">&#128465; Clear Resolved</button>
+      </div>
+      <div class="filter-row">
+        <button class="filter-btn active" id="f-all"   onclick="filterAlerts('all')">All Events</button>
+        <button class="filter-btn"        id="f-cargo" onclick="filterAlerts('cargo')">Cargo Risk</button>
+        <button class="filter-btn"        id="f-road"  onclick="filterAlerts('road')">Road Condition</button>
+        <button class="filter-btn"        id="f-alert" onclick="filterAlerts('alert')">&#9888; Critical Only</button>
+      </div>
+      <div id="alerts-list"></div>
+    </div>
+
+    <!-- PAGE: ANALYTICS -->
+    <div class="page-view" id="page-analytics">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Analytics</div>
+          <div class="section-sub">Road condition intelligence &amp; fleet health summary</div>
+        </div>
+      </div>
+      <div class="analytics-grid">
+        <div class="chart-card">
+          <div style="font-weight:700;font-size:0.83rem;letter-spacing:-0.01em;margin-bottom:14px;">&#128739; Road Condition Distribution &mdash; This Week</div>
+          <div style="position:relative;height:220px;display:flex;align-items:center;justify-content:center;">
+            <canvas id="donut-chart"></canvas>
+            <div id="donut-center" style="position:absolute;text-align:center;pointer-events:none;">
+              <div style="font-size:1.4rem;font-weight:900;letter-spacing:-0.03em;" id="donut-center-val">&ndash;</div>
+              <div style="font-size:0.6rem;color:var(--text-muted);">dominant</div>
+            </div>
+          </div>
+          <div id="donut-legend" style="display:flex;gap:16px;justify-content:center;margin-top:14px;font-size:0.7rem;"></div>
+        </div>
+        <div class="chart-card">
+          <div style="font-weight:700;font-size:0.83rem;letter-spacing:-0.01em;margin-bottom:14px;">&#128202; Avg. Roughness Index per Route</div>
+          <canvas id="bar-chart" style="max-height:240px;"></canvas>
+        </div>
+      </div>
+      <div class="maintenance-card">
+        <div style="font-weight:700;font-size:0.88rem;letter-spacing:-0.02em;margin-bottom:6px;">&#128295; Predictive Maintenance Flags</div>
+        <div style="font-size:0.72rem;color:var(--text-secondary);margin-bottom:16px;">Trucks flagged based on cumulative rough-road mileage and IMU impact scores.</div>
+        <div id="maintenance-list"></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- TRUCK DETAIL MODAL -->
+<div class="modal-overlay" id="truck-modal" onclick="closeModal(event)">
+  <div class="modal-panel" onclick="event.stopPropagation()">
+    <div class="modal-header" style="position:relative;">
+      <button class="modal-close" onclick="closeModal()">&#10005;</button>
+      <div class="modal-truck-id" id="modal-truck-id">TRK-001</div>
+      <div class="modal-truck-route" id="modal-truck-route">Loading&hellip;</div>
+      <div class="modal-driver" id="modal-truck-driver">Driver: &ndash;</div>
+    </div>
+    <div class="modal-body">
+      <div class="risk-gauge-card">
+        <div style="font-weight:700;font-size:0.83rem;letter-spacing:-0.01em;">Cargo Risk Score</div>
+        <div class="risk-gauge-container">
+          <svg class="risk-gauge-svg" viewBox="0 0 170 95" width="170" height="95">
+            <defs>
+              <filter id="glow-filter"><feGaussianBlur stdDeviation="3" result="blur"/>
+                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+            </defs>
+            <path d="M 10 85 A 75 75 0 0 1 160 85" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="10" stroke-linecap="round"/>
+            <path id="gauge-arc" d="M 10 85 A 75 75 0 0 1 160 85" fill="none" stroke="#2ECC71" stroke-width="10" stroke-linecap="round"
+                  stroke-dasharray="236" stroke-dashoffset="236"
+                  style="transition:stroke-dashoffset 0.8s cubic-bezier(0.4,0,0.2,1),stroke 0.5s ease;filter:url(#glow-filter)"/>
+          </svg>
+          <div class="risk-gauge-value" id="gauge-value" style="color:var(--safe);">0</div>
+        </div>
+        <div class="risk-gauge-label" id="gauge-status-label">Calculating&hellip;</div>
+        <div style="display:flex;justify-content:center;gap:20px;margin-top:12px;font-size:0.63rem;color:var(--text-muted);">
+          <span>0&ndash;30 <span style="color:var(--safe);font-weight:700;">Safe</span></span>
+          <span>31&ndash;65 <span style="color:var(--caution);font-weight:700;">Caution</span></span>
+          <span>66&ndash;100 <span style="color:var(--alert);font-weight:700;">Risk</span></span>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div style="font-weight:700;font-size:0.83rem;letter-spacing:-0.01em;margin-bottom:10px;">Road Roughness Index &mdash; Last 60 min</div>
+        <canvas id="roughness-line-chart"></canvas>
+      </div>
+      <div class="card" style="padding:20px;border:1px solid var(--border);border-radius:var(--radius-card);">
+        <div style="font-weight:700;font-size:0.83rem;letter-spacing:-0.01em;margin-bottom:14px;">&#128336; Event Timeline</div>
+        <div class="timeline" id="modal-timeline"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const TRUCKS=[
+  {id:'TRK-001',driver:'Ravi Sharma',  route:'Mumbai \u2192 Pune',        lat:19.076,lng:72.877},
+  {id:'TRK-002',driver:'Amit Patel',   route:'Pune \u2192 Nashik',        lat:18.520,lng:73.856},
+  {id:'TRK-003',driver:'Suresh Kumar', route:'Nashik \u2192 Aurangabad',  lat:19.997,lng:73.789},
+  {id:'TRK-004',driver:'Deepak Rao',   route:'Aurangabad \u2192 Solapur', lat:19.877,lng:75.343},
+  {id:'TRK-005',driver:'Manoj Singh',  route:'Solapur \u2192 Kolhapur',   lat:17.687,lng:75.906},
+];
+const EVENT_TYPES=[
+  {type:'Smooth Road',         severity:'safe',    icon:'\u2705',category:'road'},
+  {type:'Rough Surface',       severity:'caution', icon:'\u26a1',category:'road'},
+  {type:'Pothole Detected',    severity:'alert',   icon:'\u{1f573}\ufe0f',category:'road'},
+  {type:'High Cargo Vibration',severity:'caution', icon:'\u{1f4e6}',category:'cargo'},
+  {type:'Cargo Risk Spike',    severity:'alert',   icon:'\u{1f6a8}',category:'cargo'},
+  {type:'Speed Bump Detected', severity:'caution', icon:'\u{1f6a7}',category:'road'},
+  {type:'Engine Noise High',   severity:'caution', icon:'\u{1f50a}',category:'cargo'},
+  {type:'Stable Cargo',        severity:'safe',    icon:'\u2705',category:'cargo'},
+  {type:'Sharp Turn Impact',   severity:'caution', icon:'\u21a9\ufe0f',category:'cargo'},
+  {type:'Pothole Cluster',     severity:'alert',   icon:'\u26a0\ufe0f',category:'road'},
+];
+const ROUTES=['Mumbai \u2192 Pune','Pune \u2192 Nashik','Nashik \u2192 Aurangabad','Aurangabad \u2192 Solapur','Solapur \u2192 Kolhapur'];
+
+let allEvents=[],truckState={},currentFilter='all',currentPage='overview';
+let selectedTruck=null,roughnessLineChart=null,donutChart=null,barChart=null;
+let totalEventsToday=0,leafletMap=null,leafletMarkers={},leafletPolylines={},truckPaths={};
+let currentTheme='dark';
+
+TRUCKS.forEach(t=>{
+  truckState[t.id]={roughness:rand(10,40),cargoRisk:rand(5,30),status:'safe',lat:t.lat,lng:t.lng,
+    history:Array.from({length:60},(_,i)=>({time:new Date(Date.now()-(59-i)*60000),roughness:rand(10,50)}))};
+  truckPaths[t.id]=[[t.lat,t.lng]];
+});
+
+function rand(a,b){return Math.floor(Math.random()*(b-a+1))+a;}
+function lerp(a,b,t){return a+(b-a)*t;}
+function roughnessColor(v){return v<30?'#2ECC71':v<65?'#F0A030':'#E04535';}
+function roughnessLabel(v){return v<30?'Smooth':v<65?'Rough':'Severe';}
+function riskLabel(v){return v<30?'\u2705 Safe \u2014 Cargo secure':v<65?'\u26a1 Caution \u2014 Monitor cargo':'\u{1f6a8} High Risk \u2014 Cargo at risk!';}
+function riskColor(v){return v<30?'#2ECC71':v<65?'#F0A030':'#E04535';}
+function formatTime(d){return d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
+function formatTimeShort(d){return d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});}
+
+function toggleTheme(){
+  currentTheme=currentTheme==='dark'?'light':'dark';
+  document.documentElement.setAttribute('data-theme',currentTheme);
+  document.getElementById('theme-toggle').textContent=currentTheme==='dark'?'\u{1f319}':'\u2600\ufe0f';
+  updateChartTheme();
+}
+function getChartColors(){
+  return{grid:currentTheme==='dark'?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.05)',
+         tick:currentTheme==='dark'?'#5A5F6B':'#9CA3AF',
+         tooltipBg:currentTheme==='dark'?'#1E2229':'#fff',
+         tooltipText:currentTheme==='dark'?'#E8E8EA':'#111'};
+}
+function updateChartTheme(){
+  const c=getChartColors();
+  [roughnessLineChart,barChart].forEach(ch=>{
+    if(!ch)return;
+    if(ch.options.scales?.x){ch.options.scales.x.grid.color=c.grid;ch.options.scales.x.ticks.color=c.tick;}
+    if(ch.options.scales?.y){ch.options.scales.y.grid.color=c.grid;ch.options.scales.y.ticks.color=c.tick;}
+    ch.update('none');
+  });
+}
+
+function updateClock(){
+  const now=new Date();
+  document.getElementById('clock-time').textContent=now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  document.getElementById('clock-date').textContent=now.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+}
+setInterval(updateClock,1000);updateClock();
+
+function navigateTo(page){
+  currentPage=page;
+  document.querySelectorAll('.page-view').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn[id^="nav-"]').forEach(b=>b.classList.remove('active'));
+  document.getElementById('page-'+page).classList.add('active');
+  document.getElementById('nav-'+page).classList.add('active');
+  if(page==='analytics')renderAnalytics();
+  if(page==='alerts')renderAlerts();
+  if(page==='overview'&&leafletMap)setTimeout(()=>leafletMap.invalidateSize(),60);
+}
+
+function buildSvgIcon(color,isAlert){
+  const glow=isAlert?`<circle cx="18" cy="18" r="17" fill="${color}" opacity="0.14"/>`:'';
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
+    ${glow}<circle cx="18" cy="18" r="13" fill="${color}" stroke="rgba(255,255,255,0.85)" stroke-width="2.5"/>
+    <circle cx="18" cy="18" r="5.5" fill="rgba(255,255,255,0.9)"/></svg>`;
+}
+
+function initMap(){
+  leafletMap=L.map('main-map',{zoomControl:true,scrollWheelZoom:true}).setView([19.0,74.5],7);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    attribution:'\u00a9 OpenStreetMap contributors',maxZoom:19
+  }).addTo(leafletMap);
+  TRUCKS.forEach(t=>{
+    const state=truckState[t.id];
+    leafletMarkers[t.id]=createTruckMarker(t,state);
+    leafletPolylines[t.id]=L.polyline([[state.lat,state.lng]],
+      {color:roughnessColor(state.roughness),weight:3,opacity:0.75,smoothFactor:1}).addTo(leafletMap);
+  });
+}
+
+function createTruckMarker(truck,state){
+  const color=roughnessColor(state.roughness),isAlert=state.roughness>=65;
+  const icon=L.divIcon({className:'',
+    html:`<div style="position:relative;cursor:pointer;">${isAlert?`<div class="ring-pulse" style="background:${color};opacity:0.22;"></div>`:''
+    }${buildSvgIcon(color,isAlert)}</div>`,
+    iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-22]});
+  const marker=L.marker([state.lat,state.lng],{icon}).addTo(leafletMap)
+    .bindPopup(buildPopupHTML(truck,state),{minWidth:220});
+  marker.on('click',()=>marker.openPopup());
+  return marker;
+}
+
+function buildPopupHTML(truck,state){
+  const col=roughnessColor(state.roughness);
+  return `<div class="popup-inner"><div class="popup-truck-id">${truck.id}</div>
+    <div class="popup-driver">\u{1f465} ${truck.driver}</div>
+    <div class="popup-row"><span>\u{1f6e3}\ufe0f ${truck.route}</span></div>
+    <div class="popup-row">
+      <span>Roughness: <strong style="color:${col}">${state.roughness}</strong></span>
+      <span>Risk: <strong style="color:${riskColor(state.cargoRisk)}">${state.cargoRisk}</strong></span>
+    </div></div>
+    <button class="popup-btn" onclick="openTruckDetail('${truck.id}')">View Full Details \u2192</button>`;
+}
+
+function updateMapMarkers(){
+  TRUCKS.forEach(t=>{
+    const state=truckState[t.id];
+    state.lat=Math.max(15,Math.min(22,state.lat+(Math.random()-0.5)*0.009));
+    state.lng=Math.max(70,Math.min(78,state.lng+(Math.random()-0.5)*0.013));
+    if(leafletMarkers[t.id]){
+      const color=roughnessColor(state.roughness),isAlert=state.roughness>=65;
+      leafletMarkers[t.id].setLatLng([state.lat,state.lng]);
+      leafletMarkers[t.id].setIcon(L.divIcon({className:'',
+        html:`<div style="position:relative;cursor:pointer;">${isAlert?`<div class="ring-pulse" style="background:${color};opacity:0.22;"></div>`:''
+        }${buildSvgIcon(color,isAlert)}</div>`,
+        iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-22]}));
+      leafletMarkers[t.id].setPopupContent(buildPopupHTML(t,state));
+    }
+    truckPaths[t.id].push([state.lat,state.lng]);
+    if(truckPaths[t.id].length>18)truckPaths[t.id].shift();
+    if(leafletPolylines[t.id]){
+      leafletPolylines[t.id].setLatLngs(truckPaths[t.id]);
+      leafletPolylines[t.id].setStyle({color:roughnessColor(state.roughness)});
+    }
+  });
+}
+
+function centerMap(){
+  if(!leafletMap)return;
+  const lats=TRUCKS.map(t=>truckState[t.id].lat),lngs=TRUCKS.map(t=>truckState[t.id].lng);
+  leafletMap.fitBounds([[Math.min(...lats)-0.3,Math.min(...lngs)-0.3],[Math.max(...lats)+0.3,Math.max(...lngs)+0.3]],{padding:[30,30]});
+}
+
+function updateStats(){
+  const alerting=TRUCKS.filter(t=>truckState[t.id].status==='alert');
+  const avgR=Math.round(TRUCKS.reduce((s,t)=>s+truckState[t.id].roughness,0)/TRUCKS.length);
+  animateValue('stat-alerting',parseInt(document.getElementById('stat-alerting').textContent)||0,alerting.length,400);
+  animateValue('stat-roughness',parseInt(document.getElementById('stat-roughness').textContent)||0,avgR,500);
+  animateValue('stat-events',parseInt(document.getElementById('stat-events').textContent)||0,totalEventsToday,600);
+  const alertEl=document.getElementById('stat-alerting');
+  if(alerting.length>0){alertEl.classList.add('alerting');document.getElementById('stat-alerting-sub').textContent=alerting.map(t=>t.id).join(', ');document.getElementById('stat-alerting-sub').className='stat-delta down';}
+  else{alertEl.classList.remove('alerting');document.getElementById('stat-alerting-sub').textContent='No critical alerts';document.getElementById('stat-alerting-sub').className='stat-delta';}
+  document.getElementById('roughness-fill').style.width=avgR+'%';
+  document.getElementById('roughness-pct-val').textContent=avgR+'%';
+  document.getElementById('stat-events-sub').textContent='\u2191 '+rand(1,3)+' new in last minute';
+  document.getElementById('nav-alerts-badge').textContent=allEvents.filter(e=>e.severity==='alert').length;
+  document.getElementById('last-sync-time').textContent=formatTime(new Date());
+}
+
+function animateValue(id,from,to,dur){
+  const el=document.getElementById(id);if(!el)return;
+  const start=performance.now();
+  (function step(now){
+    const p=Math.min(1,(now-start)/dur),ease=1-Math.pow(1-p,3);
+    el.textContent=Math.round(lerp(from,to,ease));
+    if(p<1)requestAnimationFrame(step);
+    else{el.textContent=to;el.classList.add('number-update');setTimeout(()=>el.classList.remove('number-update'),500);}
+  })(start);
+}
+
+function renderTruckMiniCards(){
+  const c=document.getElementById('truck-mini-cards');c.innerHTML='';
+  TRUCKS.forEach((t,i)=>{
+    const s=truckState[t.id],sc=s.status==='alert'?'status-alert':s.status==='caution'?'status-caution':'status-safe';
+    const rc=s.cargoRisk>=66?'risk-alert':s.cargoRisk>=31?'risk-caution':'risk-safe';
+    const col=roughnessColor(s.roughness);
+    const div=document.createElement('div');
+    div.className=`truck-mini-card ${sc} card-animate`;
+    div.style.animationDelay=(i*50)+'ms';div.onclick=()=>openTruckDetail(t.id);
+    div.innerHTML=`<div class="truck-mini-id">${t.id}</div>
+      <div class="truck-mini-driver">\u{1f465} ${t.driver}</div>
+      <div class="truck-mini-risk ${rc}">${s.cargoRisk}<span style="font-size:0.75rem;font-weight:500;opacity:0.55;">/100</span></div>
+      <div class="truck-mini-label">Cargo Risk Score</div>
+      <div style="margin-top:7px;display:flex;align-items:center;gap:6px;">
+        <div style="width:7px;height:7px;border-radius:50%;background:${col};box-shadow:0 0 6px ${col}55;${s.status==='alert'?'animation:glow-pulse 1.5s ease-in-out infinite;':''}"></div>
+        <span style="font-size:0.65rem;color:var(--text-muted);">${roughnessLabel(s.roughness)} \u00b7 RI ${s.roughness}</span>
+      </div>`;
+    c.appendChild(div);
+  });
+}
+
+function renderSidebarTrucks(){
+  const c=document.getElementById('sidebar-truck-list');c.innerHTML='';
+  TRUCKS.forEach(t=>{
+    const s=truckState[t.id],col=roughnessColor(s.roughness),isAlert=s.status==='alert';
+    const btn=document.createElement('button');btn.className='nav-btn';btn.onclick=()=>openTruckDetail(t.id);
+    btn.innerHTML=`<span style="width:8px;height:8px;border-radius:50%;background:${col};flex-shrink:0;box-shadow:0 0 ${isAlert?8:4}px ${col}66;${isAlert?'animation:glow-pulse 1.5s ease-in-out infinite;':''}"></span>
+      <span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t.id}</span>
+      <span style="font-size:0.63rem;color:var(--text-muted);">${s.cargoRisk}</span>`;
+    c.appendChild(btn);
+  });
+}
+
+function generateEvent(){
+  const truck=TRUCKS[rand(0,TRUCKS.length-1)],evtDef=EVENT_TYPES[rand(0,EVENT_TYPES.length-1)],state=truckState[truck.id];
+  if(evtDef.severity==='alert'){state.roughness=rand(65,95);state.cargoRisk=rand(66,95);state.status='alert';}
+  else if(evtDef.severity==='caution'){state.roughness=rand(30,64);state.cargoRisk=rand(31,65);state.status='caution';}
+  else{state.roughness=rand(5,29);state.cargoRisk=rand(3,29);state.status='safe';}
+  state.history.push({time:new Date(),roughness:state.roughness});
+  if(state.history.length>60)state.history.shift();
+  const evt={id:'evt-'+Date.now()+'-'+Math.random().toString(36).substr(2,4),
+    truckId:truck.id,driver:truck.driver,route:truck.route,type:evtDef.type,
+    severity:evtDef.severity,icon:evtDef.icon,category:evtDef.category,timestamp:new Date(),
+    lat:(state.lat+(Math.random()-0.5)*0.002).toFixed(5),lng:(state.lng+(Math.random()-0.5)*0.002).toFixed(5),
+    roughness:state.roughness,cargoRisk:state.cargoRisk};
+  allEvents.unshift(evt);if(allEvents.length>200)allEvents.pop();totalEventsToday++;return evt;
+}
+
+function renderEventFeed(evt){
+  const feed=document.getElementById('event-feed'),sev=evt.severity;
+  const card=document.createElement('div');card.className='event-card new-event';card.onclick=()=>openTruckDetail(evt.truckId);
+  card.innerHTML=`<div class="event-icon-wrap ${sev}">${evt.icon}</div>
+    <div class="event-info">
+      <div class="event-truck">${evt.truckId} <span style="font-weight:400;color:var(--text-muted);">\u00b7 ${evt.driver}</span></div>
+      <div class="event-type">${evt.type}</div>
+      <div class="event-time">${formatTime(evt.timestamp)}</div>
+    </div>
+    <span class="event-severity-pill pill-${sev}">${sev.toUpperCase()}</span>`;
+  feed.insertBefore(card,feed.firstChild);
+  while(feed.children.length>22)feed.removeChild(feed.lastChild);
+  document.getElementById('feed-count').textContent=feed.children.length+' events';
+}
+
+function renderAlerts(){
+  const c=document.getElementById('alerts-list');
+  let f=allEvents;
+  if(currentFilter==='cargo')f=allEvents.filter(e=>e.category==='cargo');
+  else if(currentFilter==='road')f=allEvents.filter(e=>e.category==='road');
+  else if(currentFilter==='alert')f=allEvents.filter(e=>e.severity==='alert');
+  if(!f.length){c.innerHTML='<div class="empty-state"><div class="empty-icon">\u{1f4ed}</div><div>No events matching this filter</div></div>';return;}
+  c.innerHTML='';
+  f.forEach(evt=>{
+    const row=document.createElement('div');row.className=`alert-row sev-${evt.severity}`;row.onclick=()=>openTruckDetail(evt.truckId);
+    row.innerHTML=`<div class="alert-row-icon">${evt.icon}</div>
+      <div class="alert-row-main">
+        <div class="alert-row-title">${evt.type}</div>
+        <div class="alert-row-sub">\u{1f4cd} ${evt.lat}, ${evt.lng} \u00b7 ${evt.route} \u00b7 RI: ${evt.roughness} \u00b7 Risk: ${evt.cargoRisk}</div>
+      </div>
+      <div class="alert-row-truck">${evt.truckId}</div>
+      <div class="alert-row-time">${formatTime(evt.timestamp)}</div>`;
+    c.appendChild(row);
+  });
+}
+function filterAlerts(f){
+  currentFilter=f;document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('f-'+f).classList.add('active');renderAlerts();
+}
+function clearAlerts(){allEvents=allEvents.filter(e=>e.severity!=='safe');if(currentPage==='alerts')renderAlerts();}
+
+function openTruckDetail(truckId){
+  selectedTruck=truckId;const truck=TRUCKS.find(t=>t.id===truckId),state=truckState[truckId];
+  document.getElementById('modal-truck-id').textContent=truck.id+' \u{1f69b}';
+  document.getElementById('modal-truck-route').textContent='\u{1f6e3}\ufe0f '+truck.route;
+  document.getElementById('modal-truck-driver').textContent='\u{1f465} '+truck.driver;
+  document.getElementById('truck-modal').classList.add('open');
+  updateGauge(state.cargoRisk);renderRoughnessChart(state.history);renderTimeline(truckId);
+}
+function closeModal(e){
+  if(!e||e.target===document.getElementById('truck-modal')){
+    document.getElementById('truck-modal').classList.remove('open');selectedTruck=null;
+  }
+}
+function updateGauge(value){
+  const arc=document.getElementById('gauge-arc'),valEl=document.getElementById('gauge-value'),lblEl=document.getElementById('gauge-status-label');
+  arc.style.strokeDashoffset=236-(value/100)*236;arc.style.stroke=riskColor(value);
+  valEl.textContent=value;valEl.style.color=riskColor(value);valEl.style.textShadow=`0 0 20px ${riskColor(value)}66`;
+  lblEl.textContent=riskLabel(value);lblEl.style.color=riskColor(value);
+}
+function renderRoughnessChart(history){
+  const ctx=document.getElementById('roughness-line-chart').getContext('2d');
+  if(roughnessLineChart)roughnessLineChart.destroy();
+  const c=getChartColors();
+  roughnessLineChart=new Chart(ctx,{type:'line',data:{
+    labels:history.map((h,i)=>i%10===0?formatTimeShort(h.time):''),
+    datasets:[{label:'RI',data:history.map(h=>h.roughness),borderColor:'#E04535',
+      backgroundColor:'rgba(224,69,53,0.07)',borderWidth:2,pointRadius:0,pointHoverRadius:4,fill:true,tension:0.4}]
+  },options:{responsive:true,plugins:{
+    legend:{display:false},
+    tooltip:{mode:'index',intersect:false,callbacks:{label:c=>`RI: ${c.raw}`},
+      backgroundColor:c.tooltipBg,titleColor:c.tooltipText,bodyColor:'#9498A0',borderColor:'rgba(255,255,255,0.08)',borderWidth:1}
+  },scales:{
+    x:{grid:{color:c.grid,drawBorder:false},ticks:{font:{size:10,family:'Inter'},color:c.tick}},
+    y:{min:0,max:100,grid:{color:c.grid},ticks:{font:{size:10,family:'Inter'},color:c.tick},
+       title:{display:true,text:'Roughness Index',font:{size:10,family:'Inter'},color:c.tick}}
+  },animation:{duration:600,easing:'easeInOutQuart'}}});
+}
+function renderTimeline(truckId){
+  const c=document.getElementById('modal-timeline'),evts=allEvents.filter(e=>e.truckId===truckId).slice(0,12);
+  if(!evts.length){c.innerHTML='<div style="color:var(--text-muted);font-size:0.76rem;padding:10px;">No events recorded yet.</div>';return;}
+  c.innerHTML='';
+  evts.forEach(evt=>{
+    const item=document.createElement('div');item.className=`timeline-item t-${evt.severity}`;
+    item.innerHTML=`<div class="timeline-content">
+      <div class="timeline-time">${formatTime(evt.timestamp)}</div>
+      <div class="timeline-event">${evt.icon} ${evt.type} <span style="opacity:0.35;font-size:0.85em;">\u223c</span></div>
+      <div class="timeline-coords">GPS: ${evt.lat}, ${evt.lng} \u00b7 RI: ${evt.roughness}</div>
+    </div>`;
+    c.appendChild(item);
+  });
+}
+
+function renderAnalytics(){
+  const smooth=allEvents.filter(e=>e.severity==='safe').length||42;
+  const rough=allEvents.filter(e=>e.severity==='caution').length||31;
+  const pothole=allEvents.filter(e=>e.severity==='alert').length||17;
+  const total=smooth+rough+pothole;
+  const c=getChartColors();
+  if(donutChart)donutChart.destroy();
+  donutChart=new Chart(document.getElementById('donut-chart').getContext('2d'),{type:'doughnut',
+    data:{labels:['Smooth','Rough','Pothole/Severe'],datasets:[{data:[smooth,rough,pothole],
+      backgroundColor:['#2ECC71','#F0A030','#E04535'],borderWidth:0,hoverBorderWidth:2,
+      hoverBorderColor:'rgba(255,255,255,0.3)',borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'72%',
+      plugins:{legend:{display:false},tooltip:{backgroundColor:c.tooltipBg,titleColor:c.tooltipText,
+        bodyColor:'#9498A0',borderColor:'rgba(255,255,255,0.08)',borderWidth:1,
+        callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw} (${Math.round(ctx.raw/total*100)}%)`}}},
+      animation:{duration:900,easing:'easeInOutQuart'}}});
+  const dominant=smooth>=rough&&smooth>=pothole?'Smooth':rough>=pothole?'Rough':'Pothole';
+  document.getElementById('donut-center-val').textContent=dominant;
+  document.getElementById('donut-legend').innerHTML=[
+    {label:'Smooth',color:'#2ECC71',val:smooth},{label:'Rough',color:'#F0A030',val:rough},{label:'Pothole',color:'#E04535',val:pothole}
+  ].map(l=>`<div style="display:flex;align-items:center;gap:5px;">
+    <div style="width:9px;height:9px;border-radius:3px;background:${l.color};box-shadow:0 0 8px ${l.color}66;"></div>
+    <span style="color:var(--text-secondary);">${l.label}: <strong style="color:var(--text-primary);">${Math.round(l.val/total*100)}%</strong></span>
+  </div>`).join('');
+  if(barChart)barChart.destroy();
+  const routeData=ROUTES.map(r=>({route:r,value:rand(20,75)}));
+  barChart=new Chart(document.getElementById('bar-chart').getContext('2d'),{type:'bar',
+    data:{labels:routeData.map(r=>r.route),datasets:[{label:'RI',data:routeData.map(r=>r.value),
+      backgroundColor:routeData.map(r=>r.value<30?'rgba(46,204,113,0.8)':r.value<65?'rgba(240,160,48,0.8)':'rgba(224,69,53,0.8)'),
+      borderRadius:8,borderSkipped:false}]},
+    options:{responsive:true,plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:ctx=>`RI: ${ctx.raw}`},backgroundColor:c.tooltipBg,titleColor:c.tooltipText,
+               bodyColor:'#9498A0',borderColor:'rgba(255,255,255,0.08)',borderWidth:1}},
+      scales:{x:{grid:{display:false},ticks:{font:{size:9,family:'Inter'},color:c.tick}},
+              y:{min:0,max:100,grid:{color:c.grid},ticks:{font:{size:10,family:'Inter'},color:c.tick}}},
+      animation:{duration:700,easing:'easeInOutQuart'}}});
+  renderMaintenance();
+}
+
+function renderMaintenance(){
+  const flagged=[
+    {id:'TRK-003',reason:'\u2699\ufe0f Suspension stress \u2014 847 km rough road',km:'847 km',urgency:'high'},
+    {id:'TRK-005',reason:'\u{1f529} Tyre wear index elevated \u2014 612 km rough road',km:'612 km',urgency:'medium'},
+    {id:'TRK-002',reason:'\u{1f6de} Pothole cluster exposure \u2014 431 km logged',km:'431 km',urgency:'medium'},
+    {id:'TRK-001',reason:'\u2705 All systems nominal',km:'\u2014',urgency:'ok'},
+    {id:'TRK-004',reason:'\u2705 All systems nominal',km:'\u2014',urgency:'ok'},
+  ];
+  const icons={high:'\u{1f534}',medium:'\u{1f7e1}',ok:'\u{1f7e2}'};
+  const colors={high:'var(--alert)',medium:'var(--caution)',ok:'var(--safe)'};
+  const c=document.getElementById('maintenance-list');c.innerHTML='';
+  flagged.forEach(f=>{
+    const item=document.createElement('div');item.className='maintenance-item';item.onclick=()=>openTruckDetail(f.id);
+    item.innerHTML=`<div style="font-size:1.3rem;">${icons[f.urgency]}</div>
+      <div style="flex:1;"><div class="maintenance-truck-id">${f.id}</div><div class="maintenance-reason">${f.reason}</div></div>
+      ${f.km!=='\u2014'?`<div class="maintenance-km" style="color:${colors[f.urgency]};">${f.km}</div>`:''}`;
+    c.appendChild(item);
+  });
+}
+
+function exportData(){
+  const csv='Timestamp,Truck,Event,Severity,RoughnessIndex,CargoRisk,Lat,Lng\n'
+    +allEvents.slice(0,80).map(e=>`${formatTime(e.timestamp)},${e.truckId},${e.type},${e.severity},${e.roughness},${e.cargoRisk},${e.lat},${e.lng}`).join('\n');
+  const a=Object.assign(document.createElement('a'),
+    {href:URL.createObjectURL(new Blob([csv],{type:'text/csv'})),download:'roadsense-export.csv'});
+  a.click();URL.revokeObjectURL(a.href);
+}
+
+function simulationTick(){
+  for(let i=0;i<rand(1,2);i++){const evt=generateEvent();renderEventFeed(evt);}
+  updateStats();renderTruckMiniCards();renderSidebarTrucks();updateMapMarkers();
+  if(selectedTruck){const s=truckState[selectedTruck];updateGauge(s.cargoRisk);renderTimeline(selectedTruck);renderRoughnessChart(s.history);}
+  if(currentPage==='alerts')renderAlerts();
+}
+
+window.addEventListener('DOMContentLoaded',()=>{
+  for(let i=0;i<18;i++){const evt=generateEvent();renderEventFeed(evt);}
+  updateStats();renderTruckMiniCards();renderSidebarTrucks();initMap();
+  (function scheduleNext(){setTimeout(()=>{simulationTick();scheduleNext();},rand(3500,6000));})();
+});
+</script>
+</body>
+</html>
+"""
+
+out = pathlib.Path(r'C:\Users\wwwam\.gemini\antigravity-ide\scratch\roadsense\index.html')
+out.write_text(HTML, encoding='utf-8')
+print(f'Written {len(HTML)} chars to {out}')
