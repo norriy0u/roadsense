@@ -1094,75 +1094,116 @@ window.addEventListener('DOMContentLoaded',()=>{
   (function scheduleNext(){setTimeout(()=>{simulationTick();scheduleNext();},rand(3500,6000));})();
 });
 </script>
-  
-/* RoadSense: live ThingSpeak hardware panel */
+
+<!-- RoadSense Live Hardware Panel -->
+<style>
+  #roadsense-hardware-live {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 99999;
+    width: min(340px, calc(100vw - 40px));
+    box-sizing: border-box;
+    padding: 20px;
+    border-radius: 16px;
+    background: #181B20;
+    color: #E8E8EA;
+    border: 1px solid #2ECC71;
+    box-shadow: 0 8px 30px #0008;
+    font: 14px Arial, sans-serif;
+  }
+
+  #roadsense-hardware-live .rs-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  #roadsense-hardware-live .rs-card {
+    background: #242830;
+    padding: 12px;
+    border-radius: 8px;
+    overflow-wrap: anywhere;
+  }
+
+  #roadsense-hardware-live .rs-value {
+    font-size: 22px;
+    margin-top: 6px;
+    font-weight: bold;
+  }
+
+  #roadsense-hardware-live .rs-muted {
+    color: #9498A0;
+    font-size: 11px;
+    margin-top: 12px;
+  }
+</style>
+
+<div id="roadsense-hardware-live">
+  <div style="color:#2ECC71;font-weight:bold;margin-bottom:10px">
+    ● ROADSENSE HARDWARE TELEMETRY
+  </div>
+
+  <div id="rs-connection" style="color:#F0A030;margin-bottom:12px">
+    Connecting to cloud...
+  </div>
+
+  <div class="rs-grid">
+    <div class="rs-card">
+      <small>Acceleration X (raw)</small>
+      <div class="rs-value" id="rs-x">--</div>
+    </div>
+    <div class="rs-card">
+      <small>Acceleration Y (raw)</small>
+      <div class="rs-value" id="rs-y">--</div>
+    </div>
+    <div class="rs-card">
+      <small>Acceleration Z (raw)</small>
+      <div class="rs-value" id="rs-z">--</div>
+    </div>
+    <div class="rs-card">
+      <small>Sound (raw ADC)</small>
+      <div class="rs-value" id="rs-sound">--</div>
+    </div>
+  </div>
+
+  <div id="rs-updated" class="rs-muted">
+    Waiting for sensor readings...
+  </div>
+  <div class="rs-muted">
+    Live cloud readings · Refreshes every 20 seconds
+  </div>
+</div>
+
+<script>
 (function () {
-  const panel = document.createElement("div");
+  "use strict";
 
-  panel.id = "roadsense-hardware-live";
-  panel.style.cssText = `
-    position:fixed;right:20px;bottom:20px;z-index:9999;
-    width:min(340px,calc(100vw - 24px));
-    padding:20px;border-radius:16px;
-    background:#181B20;color:#E8E8EA;
-    border:1px solid #2ECC71;
-    box-shadow:0 8px 30px #0008;
-    font:14px Arial,sans-serif;
-  `;
-
-  panel.innerHTML = `
-    <div style="color:#2ECC71;font-weight:bold;margin-bottom:8px">
-      ● ROADSENSE HARDWARE TELEMETRY
-    </div>
-    <div id="rs-connection" style="color:#F0A030;margin-bottom:12px">
-      Connecting to cloud...
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div style="background:#242830;padding:12px;border-radius:8px">
-        <small>Acceleration X</small>
-        <div id="rs-x" style="font-size:20px;margin-top:5px">--</div>
-      </div>
-      <div style="background:#242830;padding:12px;border-radius:8px">
-        <small>Acceleration Y</small>
-        <div id="rs-y" style="font-size:20px;margin-top:5px">--</div>
-      </div>
-      <div style="background:#242830;padding:12px;border-radius:8px">
-        <small>Acceleration Z</small>
-        <div id="rs-z" style="font-size:20px;margin-top:5px">--</div>
-      </div>
-      <div style="background:#242830;padding:12px;border-radius:8px">
-        <small>Sound Raw</small>
-        <div id="rs-sound" style="font-size:20px;margin-top:5px">--</div>
-      </div>
-    </div>
-    <div id="rs-updated"
-         style="color:#9498A0;font-size:11px;margin-top:12px">
-      Waiting for first reading...
-    </div>
-    <div style="color:#9498A0;font-size:11px;margin-top:6px">
-      Raw sensor values · Cloud refresh: 20 seconds
-    </div>
-  `;
-
-  document.body.appendChild(panel);
+  const channelUrl =
+    "https://api.thingspeak.com/channels/3544903/feeds/last.json";
 
   async function updateRoadSense() {
     const status = document.getElementById("rs-connection");
 
     try {
-      const url =
-        "https://api.thingspeak.com/channels/3544903/feeds/last.json?t=" +
-        Date.now();
+      const response = await fetch(
+        channelUrl + "?t=" + Date.now(),
+        { cache: "no-store" }
+      );
 
-      const response = await fetch(url, { cache: "no-store" });
-
-      if (!response.ok) throw new Error("Cloud request failed");
+      if (!response.ok) {
+        throw new Error("Cloud request failed: " + response.status);
+      }
 
       const data = await response.json();
 
-      if (!data.created_at || data.field1 == null ||
-          data.field2 == null || data.field3 == null ||
-          data.field4 == null) {
+      if (
+        !data.created_at ||
+        data.field1 == null ||
+        data.field2 == null ||
+        data.field3 == null ||
+        data.field4 == null
+      ) {
         throw new Error("No complete sensor reading");
       }
 
@@ -1178,21 +1219,27 @@ window.addEventListener('DOMContentLoaded',()=>{
         status.textContent = "⚠ Last reading is old";
         status.style.color = "#F0A030";
       } else {
-        status.textContent = "● Cloud connected · Entry " + data.entry_id;
+        status.textContent =
+          "● Cloud connected · Entry " + data.entry_id;
         status.style.color = "#2ECC71";
       }
 
       document.getElementById("rs-updated").textContent =
-        "Sensor reading time: " + readingTime.toLocaleString();
+        "Last sensor reading: " + readingTime.toLocaleString();
+
     } catch (error) {
+      console.error("RoadSense telemetry:", error);
       status.textContent = "⚠ Cloud unavailable — retrying";
       status.style.color = "#E04535";
+      document.getElementById("rs-updated").textContent =
+        "Check public channel access and internet connection.";
     }
   }
 
   updateRoadSense();
   setInterval(updateRoadSense, 20000);
 })();
+</script>
 
 </body>
 </html>
