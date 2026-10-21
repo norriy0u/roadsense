@@ -1094,5 +1094,105 @@ window.addEventListener('DOMContentLoaded',()=>{
   (function scheduleNext(){setTimeout(()=>{simulationTick();scheduleNext();},rand(3500,6000));})();
 });
 </script>
+  
+/* RoadSense: live ThingSpeak hardware panel */
+(function () {
+  const panel = document.createElement("div");
+
+  panel.id = "roadsense-hardware-live";
+  panel.style.cssText = `
+    position:fixed;right:20px;bottom:20px;z-index:9999;
+    width:min(340px,calc(100vw - 24px));
+    padding:20px;border-radius:16px;
+    background:#181B20;color:#E8E8EA;
+    border:1px solid #2ECC71;
+    box-shadow:0 8px 30px #0008;
+    font:14px Arial,sans-serif;
+  `;
+
+  panel.innerHTML = `
+    <div style="color:#2ECC71;font-weight:bold;margin-bottom:8px">
+      ● ROADSENSE HARDWARE TELEMETRY
+    </div>
+    <div id="rs-connection" style="color:#F0A030;margin-bottom:12px">
+      Connecting to cloud...
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div style="background:#242830;padding:12px;border-radius:8px">
+        <small>Acceleration X</small>
+        <div id="rs-x" style="font-size:20px;margin-top:5px">--</div>
+      </div>
+      <div style="background:#242830;padding:12px;border-radius:8px">
+        <small>Acceleration Y</small>
+        <div id="rs-y" style="font-size:20px;margin-top:5px">--</div>
+      </div>
+      <div style="background:#242830;padding:12px;border-radius:8px">
+        <small>Acceleration Z</small>
+        <div id="rs-z" style="font-size:20px;margin-top:5px">--</div>
+      </div>
+      <div style="background:#242830;padding:12px;border-radius:8px">
+        <small>Sound Raw</small>
+        <div id="rs-sound" style="font-size:20px;margin-top:5px">--</div>
+      </div>
+    </div>
+    <div id="rs-updated"
+         style="color:#9498A0;font-size:11px;margin-top:12px">
+      Waiting for first reading...
+    </div>
+    <div style="color:#9498A0;font-size:11px;margin-top:6px">
+      Raw sensor values · Cloud refresh: 20 seconds
+    </div>
+  `;
+
+  document.body.appendChild(panel);
+
+  async function updateRoadSense() {
+    const status = document.getElementById("rs-connection");
+
+    try {
+      const url =
+        "https://api.thingspeak.com/channels/3544903/feeds/last.json?t=" +
+        Date.now();
+
+      const response = await fetch(url, { cache: "no-store" });
+
+      if (!response.ok) throw new Error("Cloud request failed");
+
+      const data = await response.json();
+
+      if (!data.created_at || data.field1 == null ||
+          data.field2 == null || data.field3 == null ||
+          data.field4 == null) {
+        throw new Error("No complete sensor reading");
+      }
+
+      document.getElementById("rs-x").textContent = data.field1;
+      document.getElementById("rs-y").textContent = data.field2;
+      document.getElementById("rs-z").textContent = data.field3;
+      document.getElementById("rs-sound").textContent = data.field4;
+
+      const readingTime = new Date(data.created_at);
+      const ageSeconds = (Date.now() - readingTime.getTime()) / 1000;
+
+      if (ageSeconds > 90) {
+        status.textContent = "⚠ Last reading is old";
+        status.style.color = "#F0A030";
+      } else {
+        status.textContent = "● Cloud connected · Entry " + data.entry_id;
+        status.style.color = "#2ECC71";
+      }
+
+      document.getElementById("rs-updated").textContent =
+        "Sensor reading time: " + readingTime.toLocaleString();
+    } catch (error) {
+      status.textContent = "⚠ Cloud unavailable — retrying";
+      status.style.color = "#E04535";
+    }
+  }
+
+  updateRoadSense();
+  setInterval(updateRoadSense, 20000);
+})();
+
 </body>
 </html>
