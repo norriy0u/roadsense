@@ -1175,6 +1175,19 @@ window.addEventListener('DOMContentLoaded',()=>{
   </div>
 </div>
 
+<div style="margin-top:16px; padding:16px; border-radius:12px; background:#17212b; color:#ffffff;">
+  <div style="font-size:13px; color:#aab8c5;">ESTIMATED ROAD CONDITION</div>
+  <div id="rs-road" style="font-size:24px; font-weight:bold; margin-top:8px;">
+    Waiting for sensor data...
+  </div>
+  <div style="font-size:13px; margin-top:8px; color:#aab8c5;">
+    Vibration peak: <span id="rs-vibration">--</span>
+  </div>
+  <div style="font-size:12px; margin-top:8px; color:#aab8c5;">
+    Preliminary estimate based on vibration; not confirmed pothole detection.
+  </div>
+</div>
+
 <script>
 (function () {
   "use strict";
@@ -1211,6 +1224,34 @@ window.addEventListener('DOMContentLoaded',()=>{
       document.getElementById("rs-y").textContent = data.field2;
       document.getElementById("rs-z").textContent = data.field3;
       document.getElementById("rs-sound").textContent = data.field4;
+      
+      const roadCode = Number(data.field5);
+      const vibration = data.field6;
+
+      const roadElement = document.getElementById("rs-road");
+
+      if (data.field5 == null || data.field6 == null) {
+        roadElement.textContent = "Road status unavailable";
+        roadElement.style.color = "#F0A030";
+      } else {
+        const roadLabels = {
+          0: "SMOOTH",
+          1: "ROUGH",
+          2: "POSSIBLE IMPACT"
+        };
+
+        roadElement.textContent =
+          roadLabels[roadCode] ?? "Unknown status";
+
+        roadElement.style.color =
+          roadCode === 2 ? "#FF6B6B" :
+          roadCode === 1 ? "#F0A030" :
+          roadCode === 0 ? "#2ECC71" : "#FFFFFF";
+
+        document.getElementById("rs-vibration").textContent =
+          vibration;
+      }
+
 
       const readingTime = new Date(data.created_at);
       const ageSeconds = (Date.now() - readingTime.getTime()) / 1000;
